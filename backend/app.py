@@ -128,9 +128,9 @@ def action(txn_id: str, body: ActionIn):
     now=datetime.now(timezone.utc).isoformat()
     c.execute('update transactions set status=?, updated_at=? where id=?',(status,now,txn_id))
     if action == 'recover':
-    actor = 'RevX Recovery Engine'
-    event = 'Payment recovered'
-    detail = 'Recovery successful after intelligent retry · revenue protected'
+        actor = 'RevX Recovery Engine'
+        event = 'Payment recovered'
+        detail = 'Recovery successful after intelligent retry · revenue protected'
 else:
     actor = 'Admin Demo'
     event = 'Recovery action'
