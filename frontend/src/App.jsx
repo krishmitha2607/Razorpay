@@ -304,6 +304,10 @@ export default function App() {
       );
 
       await load();
+
+      if (action === "recover") {
+        showToast("Payment recovered successfully · Revenue protected");
+      }
     } catch {
       showToast("Recovery action failed");
     }
@@ -1940,6 +1944,14 @@ function RecoveryModal({
         >
           <MessageCircle size={18} />
           Send via WhatsApp
+        </button>
+
+        <button
+          className="recover-success-button"
+          onClick={() => doAction("recover")}
+        >
+          <CheckCircle2 size={18} />
+          Simulate Successful Recovery
         </button>
 
         <button
