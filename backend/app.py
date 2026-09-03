@@ -127,7 +127,19 @@ def action(txn_id: str, body: ActionIn):
 }.get(action, tx['status'])
     now=datetime.now(timezone.utc).isoformat()
     c.execute('update transactions set status=?, updated_at=? where id=?',(status,now,txn_id))
-    c.execute('insert into audit(txn_id,ts,actor,event,detail) values(?,?,?,?,?)',(txn_id,now,'Admin Demo','Recovery action',f'{body.action} · status={status}'))
+    if action == 'recover':
+    actor = 'RevX Recovery Engine'
+    event = 'Payment recovered'
+    detail = 'Recovery successful after intelligent retry · revenue protected'
+else:
+    actor = 'Admin Demo'
+    event = 'Recovery action'
+    detail = f'{body.action} · status={status}'
+
+c.execute(
+    'insert into audit(txn_id,ts,actor,event,detail) values(?,?,?,?,?)',
+    (txn_id, now, actor, event, detail)
+)
     c.commit(); c.close(); return {'ok':True,'status':status,'payment_link':tx['payment_link']}
 
 @app.post('/api/assistant')
