@@ -568,3 +568,324 @@ button {
     grid-template-columns: 1fr;
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+/* =========================================================
+   STAGE 2 — JUDGE DEMO MODE
+   ========================================================= */
+
+.judge-demo-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(1, 8, 20, 0.88);
+  backdrop-filter: blur(12px);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.judge-demo {
+  width: min(1050px, 96vw);
+  max-height: 94vh;
+  overflow: auto;
+  position: relative;
+  border-radius: 18px;
+  border: 1px solid #245b91;
+  padding: 28px;
+  background:
+    radial-gradient(
+      circle at 80% 0%,
+      rgba(27, 112, 215, 0.22),
+      transparent 35%
+    ),
+    linear-gradient(
+      145deg,
+      #081c31,
+      #061426
+    );
+  box-shadow:
+    0 40px 120px rgba(0, 0, 0, 0.65),
+    0 0 80px rgba(22, 119, 255, 0.12);
+}
+
+.judge-close {
+  position: absolute;
+  right: 18px;
+  top: 18px;
+  border: 0;
+  background: transparent;
+  color: #abc5df;
+}
+
+.judge-heading span {
+  color: #4ba5ff;
+  font-size: 9px;
+  letter-spacing: 3px;
+  font-weight: 800;
+}
+
+.judge-heading h2 {
+  font-size: 30px;
+  margin: 7px 0;
+}
+
+.judge-heading h2 strong {
+  color: #35df9e;
+}
+
+.judge-heading p {
+  color: #93abc2;
+  font-size: 11px;
+  max-width: 600px;
+  line-height: 1.6;
+}
+
+.judge-transaction {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 9px;
+  margin: 22px 0;
+}
+
+.judge-transaction > div {
+  border: 1px solid #1a456d;
+  background: #081b30;
+  border-radius: 9px;
+  padding: 13px;
+}
+
+.judge-transaction small {
+  display: block;
+  color: #748fa8;
+  font-size: 8px;
+  margin-bottom: 6px;
+}
+
+.judge-transaction b {
+  font-size: 11px;
+}
+
+.judge-danger {
+  color: #ff747c;
+}
+
+.judge-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.judge-timeline,
+.judge-intelligence {
+  border: 1px solid #173d62;
+  border-radius: 12px;
+  background: rgba(4, 18, 34, 0.7);
+  padding: 18px;
+}
+
+.judge-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 35px 1fr;
+  gap: 11px;
+  align-items: center;
+  min-height: 58px;
+  opacity: 0.42;
+  transition: 0.4s ease;
+}
+
+.judge-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  width: 1px;
+  left: 16px;
+  top: 44px;
+  bottom: -9px;
+  background: #1a456b;
+}
+
+.judge-step.complete,
+.judge-step.current {
+  opacity: 1;
+}
+
+.judge-step-icon {
+  width: 33px;
+  height: 33px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid #315677;
+  background: #0b233c;
+  font-size: 10px;
+}
+
+.judge-step.complete .judge-step-icon {
+  color: #2de09b;
+  background: #0d3c31;
+  border-color: #1c8d64;
+}
+
+.judge-step.current .judge-step-icon {
+  color: white;
+  background: #1677ff;
+  border-color: #5aa5ff;
+  box-shadow: 0 0 0 7px rgba(22, 119, 255, 0.12);
+  animation: judgePulse 1.2s infinite;
+}
+
+@keyframes judgePulse {
+  50% {
+    box-shadow:
+      0 0 0 12px rgba(22, 119, 255, 0);
+  }
+}
+
+.judge-step b {
+  display: block;
+  font-size: 11px;
+}
+
+.judge-step small {
+  display: block;
+  color: #839db6;
+  font-size: 8px;
+  margin-top: 3px;
+}
+
+.judge-ai-label {
+  display: block;
+  color: #947cff;
+  font-size: 8px;
+  letter-spacing: 2px;
+  font-weight: 800;
+  margin-bottom: 13px;
+}
+
+.judge-score {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+
+.judge-score > div {
+  background: #091d33;
+  border: 1px solid #19436a;
+  border-radius: 9px;
+  padding: 13px;
+}
+
+.judge-score small,
+.judge-value small,
+.judge-analysis small,
+.judge-strategy small {
+  display: block;
+  color: #8099b0;
+  font-size: 8px;
+}
+
+.judge-score strong {
+  display: block;
+  font-size: 25px;
+  margin-top: 5px;
+  color: #41df9f;
+}
+
+.judge-value {
+  margin-top: 10px;
+  padding: 17px;
+  border-radius: 10px;
+  border: 1px solid #17624e;
+  background:
+    linear-gradient(
+      135deg,
+      #09352d,
+      #092436
+    );
+}
+
+.judge-value strong {
+  display: block;
+  color: #43e4a2;
+  font-size: 29px;
+  margin: 5px 0;
+}
+
+.judge-value span {
+  font-size: 8px;
+  color: #82ae9c;
+}
+
+.judge-analysis,
+.judge-strategy {
+  margin-top: 10px;
+  padding: 13px;
+  border: 1px solid #183d60;
+  border-radius: 9px;
+  background: #07182b;
+}
+
+.judge-analysis p {
+  color: #b0c6d8;
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+.judge-strategy b {
+  display: block;
+  color: #5caaff;
+  margin: 6px 0;
+  font-size: 13px;
+}
+
+.judge-strategy span {
+  font-size: 8px;
+  color: #92aac0;
+}
+
+.judge-processing {
+  border-top: 1px solid #173c60;
+  margin-top: 18px;
+  padding-top: 16px;
+  color: #a8bed2;
+  font-size: 9px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.judge-processing > span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2fe09b;
+  box-shadow: 0 0 13px #2fe09b;
+  animation: judgeStatus 1s infinite;
+}
+
+@keyframes judgeStatus {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@media (max-width: 850px) {
+  .judge-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .judge-transaction {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
