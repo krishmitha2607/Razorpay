@@ -119,7 +119,12 @@ def action(txn_id: str, body: ActionIn):
     c=conn(); tx=c.execute('select * from transactions where id=?',(txn_id,)).fetchone()
     if not tx: c.close(); raise HTTPException(404,'Transaction not found')
     action=body.action.lower()
-    status = {'copy':'Recovery Ready','whatsapp':'Link Sent','retry':'Retry Scheduled'}.get(action, tx['status'])
+    status = {
+    'copy': 'Recovery Ready',
+    'whatsapp': 'Link Sent',
+    'retry': 'Retry Scheduled',
+    'recover': 'Recovered'
+}.get(action, tx['status'])
     now=datetime.now(timezone.utc).isoformat()
     c.execute('update transactions set status=?, updated_at=? where id=?',(status,now,txn_id))
     c.execute('insert into audit(txn_id,ts,actor,event,detail) values(?,?,?,?,?)',(txn_id,now,'Admin Demo','Recovery action',f'{body.action} · status={status}'))
