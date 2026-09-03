@@ -112,6 +112,8 @@ export default function App() {
   const [demoStage, setDemoStage] = useState(0);
   const [demoTransaction, setDemoTransaction] = useState(null);
 
+  const [recoverySuccess, setRecoverySuccess] = useState(null);
+
   const [chartRange, setChartRange] = useState("7D");
 
   const showToast = (text) => {
@@ -306,12 +308,54 @@ export default function App() {
       await load();
 
       if (action === "recover") {
+        const recoveredTx = {
+          ...selected,
+          status: result.status,
+        };
+
+        setRecoverySuccess(recoveredTx);
+        setSelected(null);
         showToast("Payment recovered successfully · Revenue protected");
       }
     } catch {
       showToast("Recovery action failed");
     }
   }
+
+  async function resetDemo() {
+    try {
+      const response = await fetch(`${API}/api/demo/reset`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error("Reset failed");
+      }
+
+      setSelected(null);
+      setCustomerModal(null);
+      setAuditModal(null);
+      setDemoOpen(false);
+      setDemoRunning(false);
+      setDemoStage(0);
+      setDemoTransaction(null);
+      setRecoverySuccess(null);
+      setQuery("");
+      setStatusFilter("All");
+      setFailureFilter("All");
+      setAmountFilter("All");
+      setChartRange("7D");
+      setEvents([]);
+      setAuditRows([]);
+
+      await load();
+
+      showToast("Demo reset successfully · Ready for judges");
+    } catch {
+      showToast("Unable to reset demo");
+    }
+  }
+
 
   async function ask(message = input) {
     if (!message.trim()) return;
@@ -719,7 +763,7 @@ export default function App() {
           />
         )}
 
-        {page === "Settings" && <SettingsPage live={live} />}
+        {page === "Settings" && <SettingsPage live={live} resetDemo={resetDemo} />}
       </main>
 
 
@@ -740,6 +784,18 @@ export default function App() {
           close={() => setSelected(null)}
           doAction={doAction}
           customer={() => setCustomerModal(selected)}
+        />
+      )}
+
+      {recoverySuccess && (
+        <RecoverySuccessModal
+          tx={recoverySuccess}
+          close={() => setRecoverySuccess(null)}
+          viewAudit={async () => {
+            const tx = recoverySuccess;
+            setRecoverySuccess(null);
+            await openAudit(tx);
+          }}
         />
       )}
 
@@ -1344,33 +1400,80 @@ function RecoveryLinksPage({ transactions, openRecovery }) {
 }
 
 function AnalyticsPage({ data }) {
+  const rows = data?.transactions || [];
+  const recoveredRows = rows.filter((tx) => tx.status === "Recovered");
+
+  const totalAtRisk = rows.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+  const recoveredRevenue = recoveredRows.reduce(
+    (sum, tx) => sum + Number(tx.amount || 0),
+    0
+  );
+  const expectedRecoverable = rows.reduce(
+    (sum, tx) => sum + getExpectedRecovery(tx),
+    0
+  );
+  const averageConfidence = rows.length
+    ? Math.round(
+        rows.reduce((sum, tx) => sum + Number(tx.confidence || 0), 0) /
+          rows.length
+      )
+    : 0;
+  const liveRecoveryRate = rows.length
+    ? Math.round((recoveredRows.length / rows.length) * 100)
+    : 0;
+
+  const analyticsCards = [
+    {
+      label: "Revenue at Risk",
+      value: `₹${fmt(totalAtRisk)}`,
+      sub: "Value currently represented by intercepted failures",
+      tone: "blue",
+    },
+    {
+      label: "Recovered in Demo",
+      value: `₹${fmt(recoveredRevenue)}`,
+      sub: `${recoveredRows.length} transaction${
+        recoveredRows.length === 1 ? "" : "s"
+      } successfully recovered`,
+      tone: "green",
+    },
+    {
+      label: "Expected Recoverable",
+      value: `₹${fmt(expectedRecoverable)}`,
+      sub: "AI-weighted recoverable value across active cases",
+      tone: "amber",
+    },
+    {
+      label: "AI Confidence",
+      value: `${averageConfidence}%`,
+      sub: `Live recovery completion: ${liveRecoveryRate}%`,
+      tone: "indigo",
+    },
+  ];
+
   return (
     <div className="page-view">
       <div className="page-title-row">
         <div>
-          <span className="page-kicker">
-            PERFORMANCE INTELLIGENCE
-          </span>
+          <span className="page-kicker">PERFORMANCE INTELLIGENCE</span>
 
           <h1>Revenue Recovery Analytics</h1>
 
           <p>
-            Understand what RevX-Agent recovered and why.
+            Live recovery impact, expected recoverable value and AI decision
+            performance.
           </p>
         </div>
       </div>
 
       <section className="metric-row analytics-metrics">
-        {data.metrics.map((metric) => (
+        {analyticsCards.map((metric) => (
           <div
             className={`metric-card ${metric.tone}`}
             key={metric.label}
           >
             <div>
-              <div className="metric-value">
-                {metric.value}
-              </div>
-
+              <div className="metric-value">{metric.value}</div>
               <b>{metric.label}</b>
               <small>{metric.sub}</small>
             </div>
@@ -1383,9 +1486,7 @@ function AnalyticsPage({ data }) {
           <div className="panel-head">
             <div>
               <h3>Recovery Performance</h3>
-              <small>
-                Transaction volume against recovered volume
-              </small>
+              <small>Transaction volume against recovered volume</small>
             </div>
           </div>
 
@@ -1433,6 +1534,60 @@ function AnalyticsPage({ data }) {
         </div>
 
         <FailureChart data={data} />
+      </div>
+
+      <div className="panel page-panel">
+        <div className="panel-head">
+          <div>
+            <h3>AI Recovery Value Intelligence</h3>
+            <small>
+              Expected value is calculated from each transaction's recovery
+              probability.
+            </small>
+          </div>
+        </div>
+
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Transaction</th>
+                <th>Amount</th>
+                <th>Recovery Probability</th>
+                <th>Expected Recoverable</th>
+                <th>AI Confidence</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {rows.map((tx) => (
+                <tr key={`analytics-${tx.id}`}>
+                  <td>
+                    <b>{tx.id}</b>
+                  </td>
+                  <td>₹{fmt(tx.amount)}</td>
+                  <td>
+                    <b>{getRecoveryProbability(tx)}%</b>
+                  </td>
+                  <td className="green">
+                    <b>₹{fmt(getExpectedRecovery(tx))}</b>
+                  </td>
+                  <td>{tx.confidence}%</td>
+                  <td>
+                    <span
+                      className={`status ${tx.status
+                        .toLowerCase()
+                        .replaceAll(" ", "-")}`}
+                    >
+                      {tx.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -1767,7 +1922,7 @@ function AuditPage({ rows, openAudit }) {
   );
 }
 
-function SettingsPage({ live }) {
+function SettingsPage({ live, resetDemo }) {
   return (
     <div className="page-view">
       <div className="page-title-row">
@@ -1812,6 +1967,21 @@ function SettingsPage({ live }) {
           value="ENABLED"
           positive
         />
+
+        <div className="panel setting-card reset-demo-card">
+          <div>
+            <h3>Judge Demo Reset</h3>
+            <p>
+              Restore all demo transactions, statuses and audit history to the
+              original hackathon-ready state.
+            </p>
+          </div>
+
+          <button className="primary" onClick={resetDemo}>
+            <RefreshCw size={16} />
+            Reset Demo
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1960,6 +2130,231 @@ function RecoveryModal({
         >
           View Customer Details →
         </button>
+      </div>
+    </div>
+  );
+}
+
+
+function RecoverySuccessModal({ tx, close, viewAudit }) {
+  const probability = getRecoveryProbability(tx);
+
+  const recoveryTime =
+    tx.id === "TXN-8801"
+      ? "12m 18s"
+      : tx.retry_window === "Immediate"
+      ? "38s"
+      : tx.retry_window;
+
+  const backdropStyle = {
+    position: "fixed",
+    inset: 0,
+    zIndex: 1200,
+    background: "rgba(2, 10, 23, 0.88)",
+    backdropFilter: "blur(10px)",
+    display: "grid",
+    placeItems: "center",
+    padding: "24px",
+  };
+
+  const cardStyle = {
+    width: "min(720px, 96vw)",
+    maxHeight: "92vh",
+    overflowY: "auto",
+    background:
+      "linear-gradient(180deg, rgba(10, 27, 48, 0.98), rgba(5, 17, 31, 0.99))",
+    border: "1px solid rgba(52, 211, 153, 0.36)",
+    borderRadius: "24px",
+    boxShadow:
+      "0 30px 90px rgba(0, 0, 0, 0.55), 0 0 60px rgba(16, 185, 129, 0.10)",
+    padding: "32px",
+    color: "#f8fbff",
+  };
+
+  const successIconStyle = {
+    width: "72px",
+    height: "72px",
+    borderRadius: "999px",
+    margin: "0 auto 18px",
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(16, 185, 129, 0.14)",
+    border: "1px solid rgba(52, 211, 153, 0.38)",
+    boxShadow: "0 0 36px rgba(16, 185, 129, 0.16)",
+  };
+
+  const metricGridStyle = {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: "12px",
+    marginTop: "24px",
+  };
+
+  const metricStyle = {
+    padding: "15px 16px",
+    borderRadius: "14px",
+    background: "rgba(255,255,255,0.035)",
+    border: "1px solid rgba(148,163,184,0.13)",
+  };
+
+  const actionRowStyle = {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "12px",
+    marginTop: "24px",
+  };
+
+  return (
+    <div
+      style={backdropStyle}
+      onMouseDown={close}
+    >
+      <div
+        style={cardStyle}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div style={{ textAlign: "center" }}>
+          <div style={successIconStyle}>
+            <CheckCircle2 size={38} />
+          </div>
+
+          <span
+            style={{
+              display: "inline-block",
+              fontSize: "11px",
+              letterSpacing: "0.16em",
+              fontWeight: 800,
+              color: "#6ee7b7",
+              marginBottom: "8px",
+            }}
+          >
+            REVX AUTONOMOUS RECOVERY COMPLETE
+          </span>
+
+          <h2
+            style={{
+              margin: "0 0 6px",
+              fontSize: "30px",
+              letterSpacing: "-0.02em",
+            }}
+          >
+            PAYMENT RECOVERED
+          </h2>
+
+          <div
+            style={{
+              marginTop: "16px",
+              fontSize: "38px",
+              lineHeight: 1,
+              fontWeight: 900,
+              color: "#ffffff",
+            }}
+          >
+            ₹{fmt(tx.amount)}
+          </div>
+
+          <div
+            style={{
+              marginTop: "8px",
+              color: "#6ee7b7",
+              fontWeight: 800,
+              letterSpacing: "0.08em",
+              fontSize: "12px",
+            }}
+          >
+            REVENUE PROTECTED
+          </div>
+        </div>
+
+        <div style={metricGridStyle}>
+          <div style={metricStyle}>
+            <small style={{ color: "#8ea5bf" }}>Transaction</small>
+            <div style={{ marginTop: "5px", fontWeight: 800 }}>{tx.id}</div>
+          </div>
+
+          <div style={metricStyle}>
+            <small style={{ color: "#8ea5bf" }}>Customer</small>
+            <div style={{ marginTop: "5px", fontWeight: 800 }}>
+              {tx.customer}
+            </div>
+          </div>
+
+          <div style={metricStyle}>
+            <small style={{ color: "#8ea5bf" }}>AI Confidence</small>
+            <div
+              style={{
+                marginTop: "5px",
+                fontWeight: 900,
+                color: "#6ee7b7",
+              }}
+            >
+              {tx.confidence}%
+            </div>
+          </div>
+
+          <div style={metricStyle}>
+            <small style={{ color: "#8ea5bf" }}>Recovery Probability</small>
+            <div
+              style={{
+                marginTop: "5px",
+                fontWeight: 900,
+                color: "#93c5fd",
+              }}
+            >
+              {probability}%
+            </div>
+          </div>
+
+          <div style={metricStyle}>
+            <small style={{ color: "#8ea5bf" }}>Recovery Strategy</small>
+            <div style={{ marginTop: "5px", fontWeight: 800 }}>
+              {tx.strategy}
+            </div>
+          </div>
+
+          <div style={metricStyle}>
+            <small style={{ color: "#8ea5bf" }}>Recovery Time</small>
+            <div style={{ marginTop: "5px", fontWeight: 800 }}>
+              {recoveryTime}
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            marginTop: "18px",
+            padding: "16px 18px",
+            borderRadius: "16px",
+            background: "rgba(16, 185, 129, 0.07)",
+            border: "1px solid rgba(52, 211, 153, 0.20)",
+          }}
+        >
+          <div style={{ display: "grid", gap: "10px", fontSize: "14px" }}>
+            <div>✓ Payment successfully recovered</div>
+            <div>✓ Audit trail recorded by RevX Recovery Engine</div>
+            <div>✓ Manual intervention: 0</div>
+          </div>
+        </div>
+
+        <div style={actionRowStyle}>
+          <button
+            className="secondary"
+            onClick={viewAudit}
+            style={{ minHeight: "46px" }}
+          >
+            <FileText size={16} />
+            View Audit Trail
+          </button>
+
+          <button
+            className="primary"
+            onClick={close}
+            style={{ minHeight: "46px" }}
+          >
+            <CheckCircle2 size={16} />
+            Done
+          </button>
+        </div>
       </div>
     </div>
   );
