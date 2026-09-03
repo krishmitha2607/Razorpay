@@ -889,3 +889,41 @@ button {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.recover-success-button {
+  width: 100%;
+  margin-top: 10px;
+  padding: 11px;
+  color: #062519;
+  border: 0;
+  border-radius: 7px;
+  background: linear-gradient(
+    90deg,
+    #25d892,
+    #36e4a3
+  );
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.recover-success-button:hover {
+  filter: brightness(1.08);
+}
