@@ -1,0 +1,23 @@
+# Node dependencies
+frontend/node_modules/
+
+# Python cache
+__pycache__/
+backend/__pycache__/
+*.pyc
+
+# Local database
+*.db
+
+# Environment / secret files
+.env
+.env.*
+!.env.example
+
+# Virtual environments
+venv/
+.venv/
+
+# Windows / OS
+Thumbs.db
+.DS_Store
