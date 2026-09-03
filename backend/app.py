@@ -768,50 +768,65 @@ def assistant(body: ChatIn):
 # =========================================================
 # LIVE WEBHOOK EVENTS
 # =========================================================
-@app.post('/api/demo/reset')
+
+
+@app.post("/api/demo/reset")
 def reset_demo():
     c = conn()
+    try:
+        c.execute("DELETE FROM audit")
+        c.execute("DELETE FROM transactions")
+        c.execute("DELETE FROM sqlite_sequence WHERE name='audit'")
 
-    c.execute('delete from audit')
-    c.execute('delete from transactions')
+        now = datetime.now(timezone.utc).isoformat()
 
-    now = datetime.now(timezone.utc).isoformat()
-
-    c.executemany(
-        'insert into transactions values(?,?,?,?,?,?,?,?,?,?,?,?)',
-        [row + (now,) for row in SEED]
-    )
-
-    for row in SEED:
-        c.execute(
-            'insert into audit(txn_id,ts,actor,event,detail) values(?,?,?,?,?)',
-            (
-                row[0],
-                now,
-                'RevX Decision Engine',
-                'Failure classified',
-                f'{row[1]} · {row[8]}'
-            )
+        c.executemany(
+            "INSERT INTO transactions VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            [row + (now,) for row in SEED]
         )
 
-        c.execute(
-            'insert into audit(txn_id,ts,actor,event,detail) values(?,?,?,?,?)',
-            (
-                row[0],
-                now,
-                'Recovery Agent',
-                'Strategy generated',
-                f'{row[3]} · Confidence {row[4]}%'
+        for row in SEED:
+            c.execute(
+                """
+                INSERT INTO audit(txn_id,ts,actor,event,detail)
+                VALUES(?,?,?,?,?)
+                """,
+                (
+                    row[0],
+                    now,
+                    "RevX Decision Engine",
+                    "Failure classified",
+                    f"{row[1]} · {row[8]}"
+                )
             )
-        )
 
-    c.commit()
-    c.close()
+            c.execute(
+                """
+                INSERT INTO audit(txn_id,ts,actor,event,detail)
+                VALUES(?,?,?,?,?)
+                """,
+                (
+                    row[0],
+                    now,
+                    "Recovery Agent",
+                    "Strategy generated",
+                    f"{row[3]} · Confidence {row[4]}%"
+                )
+            )
 
-    return {
-        'ok': True,
-        'message': 'RevX demo data reset'
-    }
+        c.commit()
+
+        return {
+            "ok": True,
+            "message": "Demo reset successfully",
+            "transactions_restored": len(SEED)
+        }
+    except Exception:
+        c.rollback()
+        raise
+    finally:
+        c.close()
+
 @app.get("/api/events")
 async def events(request: Request):
 
