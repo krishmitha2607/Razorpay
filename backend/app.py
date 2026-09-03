@@ -768,7 +768,50 @@ def assistant(body: ChatIn):
 # =========================================================
 # LIVE WEBHOOK EVENTS
 # =========================================================
+@app.post('/api/demo/reset')
+def reset_demo():
+    c = conn()
 
+    c.execute('delete from audit')
+    c.execute('delete from transactions')
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    c.executemany(
+        'insert into transactions values(?,?,?,?,?,?,?,?,?,?,?,?)',
+        [row + (now,) for row in SEED]
+    )
+
+    for row in SEED:
+        c.execute(
+            'insert into audit(txn_id,ts,actor,event,detail) values(?,?,?,?,?)',
+            (
+                row[0],
+                now,
+                'RevX Decision Engine',
+                'Failure classified',
+                f'{row[1]} · {row[8]}'
+            )
+        )
+
+        c.execute(
+            'insert into audit(txn_id,ts,actor,event,detail) values(?,?,?,?,?)',
+            (
+                row[0],
+                now,
+                'Recovery Agent',
+                'Strategy generated',
+                f'{row[3]} · Confidence {row[4]}%'
+            )
+        )
+
+    c.commit()
+    c.close()
+
+    return {
+        'ok': True,
+        'message': 'RevX demo data reset'
+    }
 @app.get("/api/events")
 async def events(request: Request):
 
