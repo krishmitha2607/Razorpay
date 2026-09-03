@@ -1943,6 +1943,14 @@ function RecoveryModal({
         </button>
 
         <button
+          className="recover-success-button"
+          onClick={() => doAction("recover")}
+        >
+          <CheckCircle2 size={18} />
+          Simulate Successful Recovery
+        </button>
+
+        <button
           className="customer"
           onClick={customer}
         >
