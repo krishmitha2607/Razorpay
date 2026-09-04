@@ -64,7 +64,7 @@ They are:
 
 ---
 
-# 🚀 Our Solution
+# 🚀 Proposed Solution
 
 **RevX-Agent** introduces an autonomous decision layer for post-failure payment recovery.
 
