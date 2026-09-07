@@ -19,7 +19,7 @@ DIST = ROOT / "frontend" / "dist"
 
 app = FastAPI(
     title="Razorpay RevX-Agent API",
-    version="1.0.0"
+    version="1.1.0"
 )
 
 app.add_middleware(
@@ -218,6 +218,27 @@ class ChatIn(BaseModel):
 
 class ActionIn(BaseModel):
     action: str
+
+
+# =========================================================
+# D3 LIVE EVENT BUS
+# =========================================================
+
+EVENT_SUBSCRIBERS = set()
+
+
+async def publish_event(payload: dict):
+    """Broadcast a real backend state-change event to connected SSE clients."""
+    stale = []
+
+    for queue in list(EVENT_SUBSCRIBERS):
+        try:
+            queue.put_nowait(payload)
+        except asyncio.QueueFull:
+            stale.append(queue)
+
+    for queue in stale:
+        EVENT_SUBSCRIBERS.discard(queue)
 
 
 # =========================================================
@@ -509,7 +530,7 @@ def audit(txn_id: str):
 # =========================================================
 
 @app.post("/api/transactions/{txn_id}/action")
-def action(txn_id: str, body: ActionIn):
+async def action(txn_id: str, body: ActionIn):
 
     c = conn()
 
@@ -615,10 +636,29 @@ def action(txn_id: str, body: ActionIn):
     c.commit()
     c.close()
 
+    event_type = {
+        "copy": "payment.recovery_link.copied",
+        "whatsapp": "payment.recovery_link.sent",
+        "retry": "payment.retry.scheduled",
+        "recover": "payment.recovered"
+    }.get(action_name, "transaction.updated")
+
+    await publish_event({
+        "type": event_type,
+        "txn": txn_id,
+        "status": status,
+        "amount": tx["amount"],
+        "customer": tx["customer"],
+        "source": "recovery_action",
+        "refresh": True,
+        "ts": now
+    })
+
     return {
         "ok": True,
         "status": status,
-        "payment_link": tx["payment_link"]
+        "payment_link": tx["payment_link"],
+        "event": event_type
     }
 
 
@@ -771,7 +811,7 @@ def assistant(body: ChatIn):
 
 
 @app.post("/api/demo/reset")
-def reset_demo():
+async def reset_demo():
     c = conn()
     try:
         c.execute("DELETE FROM audit")
@@ -816,6 +856,14 @@ def reset_demo():
 
         c.commit()
 
+        await publish_event({
+            "type": "demo.reset",
+            "txn": "SYSTEM",
+            "source": "judge_reset",
+            "refresh": True,
+            "ts": datetime.now(timezone.utc).isoformat()
+        })
+
         return {
             "ok": True,
             "message": "Demo reset successfully",
@@ -831,47 +879,59 @@ def reset_demo():
 async def events(request: Request):
 
     async def stream():
+        queue = asyncio.Queue(maxsize=50)
+        EVENT_SUBSCRIBERS.add(queue)
 
-        kinds = [
-            "payment.failed",
-            "payment.recovery_link.created",
-            "payment.retried",
-            "payment.recovered"
-        ]
-
-        ids = [
-            "TXN-8801",
-            "TXN-8802",
-            "TXN-8803",
-            "TXN-8804",
-            "TXN-8805"
-        ]
-
-        while True:
-
-            if await request.is_disconnected():
-                break
-
-            payload = {
-                "type": random.choice(kinds),
-                "txn": random.choice(ids),
-                "ts": datetime.now(
-                    timezone.utc
-                ).isoformat()
+        try:
+            connected = {
+                "type": "system.connected",
+                "txn": "REVX",
+                "source": "sse",
+                "refresh": False,
+                "ts": datetime.now(timezone.utc).isoformat()
             }
+            yield f"data: {json.dumps(connected)}\n\n"
 
-            yield (
-                f"data: {json.dumps(payload)}\n\n"
-            )
+            while True:
+                if await request.is_disconnected():
+                    break
 
-            await asyncio.sleep(8)
+                try:
+                    payload = await asyncio.wait_for(queue.get(), timeout=8)
+                except asyncio.TimeoutError:
+                    # Keep the connection visibly alive with a synthetic
+                    # webhook heartbeat. Real recovery actions are pushed
+                    # immediately through publish_event().
+                    payload = {
+                        "type": random.choice([
+                            "payment.failed",
+                            "payment.recovery_link.created",
+                            "payment.retried"
+                        ]),
+                        "txn": random.choice([
+                            "TXN-8801",
+                            "TXN-8802",
+                            "TXN-8803",
+                            "TXN-8804",
+                            "TXN-8805"
+                        ]),
+                        "source": "webhook_simulation",
+                        "refresh": False,
+                        "ts": datetime.now(timezone.utc).isoformat()
+                    }
+
+                yield f"data: {json.dumps(payload)}\n\n"
+
+        finally:
+            EVENT_SUBSCRIBERS.discard(queue)
 
     return StreamingResponse(
         stream(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "Connection": "keep-alive"
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no-cache"
         }
     )
 
