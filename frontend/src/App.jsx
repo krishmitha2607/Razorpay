@@ -77,6 +77,119 @@ function getExpectedRecovery(tx) {
   return Math.round(tx.amount * (probability / 100));
 }
 
+function parseCompactNumber(value) {
+  if (value === null || value === undefined) return 0;
+
+  const text = String(value).replace(/[₹,\s]/g, "").toUpperCase();
+  const match = text.match(/^([0-9]*\.?[0-9]+)([KMB])?$/);
+
+  if (!match) return Number(text) || 0;
+
+  const amount = Number(match[1]);
+  const multiplier = { K: 1e3, M: 1e6, B: 1e9 }[match[2]] || 1;
+
+  return amount * multiplier;
+}
+
+function formatCompactNumber(value) {
+  return fmt(Math.round(Number(value || 0)));
+}
+
+function formatCompactCurrency(value) {
+  const amount = Number(value || 0);
+
+  if (amount >= 1e9) return `₹${(amount / 1e9).toFixed(1)}B`;
+  if (amount >= 1e6) return `₹${(amount / 1e6).toFixed(2).replace(/\.00$/, "").replace(/0$/, "")}M`;
+  if (amount >= 1e3) return `₹${fmt(Math.round(amount))}`;
+
+  return `₹${fmt(Math.round(amount))}`;
+}
+
+function getLiveDashboardData(data) {
+  if (!data) return data;
+
+  const rows = data.transactions || [];
+  const recoveredRows = rows.filter((tx) => tx.status === "Recovered");
+  const recoveredCount = recoveredRows.length;
+  const recoveredRevenue = recoveredRows.reduce(
+    (sum, tx) => sum + Number(tx.amount || 0),
+    0
+  );
+
+  const originalMetrics = data.metrics || [];
+  const baseIntercepted = parseCompactNumber(originalMetrics[0]?.value);
+  const baseRecovered = parseCompactNumber(originalMetrics[1]?.value);
+  const basePending = parseCompactNumber(originalMetrics[2]?.value);
+  const baseRevenue = parseCompactNumber(originalMetrics[3]?.value);
+
+  const liveRecovered = baseRecovered + recoveredCount;
+  const livePending = Math.max(0, basePending - recoveredCount);
+  const liveRevenue = baseRevenue + recoveredRevenue;
+  const liveRecoveryRate = baseIntercepted
+    ? ((liveRecovered / baseIntercepted) * 100).toFixed(1)
+    : data.system?.recovery_rate || 0;
+
+  const metrics = originalMetrics.map((metric, index) => {
+    if (index === 1) {
+      return {
+        ...metric,
+        value: formatCompactNumber(liveRecovered),
+        sub: recoveredCount
+          ? `${recoveredCount} recovered in this live demo`
+          : metric.sub,
+      };
+    }
+
+    if (index === 2) {
+      return {
+        ...metric,
+        value: formatCompactNumber(livePending),
+        sub: recoveredCount
+          ? `${recoveredCount} case${recoveredCount === 1 ? "" : "s"} closed live`
+          : metric.sub,
+      };
+    }
+
+    if (index === 3) {
+      return {
+        ...metric,
+        value: formatCompactCurrency(liveRevenue),
+        sub: recoveredRevenue
+          ? `+₹${fmt(recoveredRevenue)} protected in this demo`
+          : metric.sub,
+      };
+    }
+
+    return metric;
+  });
+
+  const chart = (data.chart || []).map((point, index, list) =>
+    index === list.length - 1 && recoveredCount
+      ? {
+          ...point,
+          recovered: Number(point.recovered || 0) + recoveredCount,
+        }
+      : point
+  );
+
+  return {
+    ...data,
+    metrics,
+    chart,
+    system: {
+      ...(data.system || {}),
+      recovery_rate: `${liveRecoveryRate}%`,
+    },
+    liveRecovery: {
+      recoveredCount,
+      recoveredRevenue,
+      pendingCount: livePending,
+      recoveredTotal: liveRecovered,
+      recoveredRevenueTotal: liveRevenue,
+    },
+  };
+}
+
 export default function App() {
   const [data, setData] = useState(null);
   const [page, setPage] = useState("Dashboard");
@@ -217,7 +330,9 @@ export default function App() {
     return rows;
   }, [data, query, statusFilter, failureFilter, amountFilter]);
 
-  const failedTransactions = transactions;
+  const failedTransactions = transactions.filter(
+    (tx) => tx.status !== "Recovered"
+  );
 
   async function openRecovery(tx) {
     try {
@@ -835,6 +950,8 @@ function Dashboard({
   input,
   setInput,
 }) {
+  const liveData = getLiveDashboardData(data);
+
   return (
     <>
       <section className="hero">
@@ -883,24 +1000,24 @@ function Dashboard({
 
         <div className="hero-stats">
           <div>
-            <b>{data.system.uptime}</b>
+            <b>{liveData.system.uptime}</b>
             <span>System Uptime</span>
           </div>
 
           <div>
-            <b>{data.system.latency}</b>
+            <b>{liveData.system.latency}</b>
             <span>Webhook Latency</span>
           </div>
 
           <div>
-            <b>{data.system.processed}</b>
+            <b>{liveData.system.processed}</b>
             <span>Transactions Processed</span>
           </div>
         </div>
       </section>
 
       <section className="metric-row">
-        {data.metrics.map((metric, index) => (
+        {liveData.metrics.map((metric, index) => (
           <div
             className={`metric-card ${metric.tone}`}
             key={metric.label}
@@ -962,7 +1079,7 @@ function Dashboard({
 
               <div className="chart-wrap">
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={data.chart}>
+                  <ComposedChart data={liveData.chart}>
                     <CartesianGrid
                       stroke="#18304b"
                       vertical={false}
@@ -1010,7 +1127,7 @@ function Dashboard({
               </div>
             </div>
 
-            <FailureChart data={data} />
+            <FailureChart data={liveData} failedCount={liveData.liveRecovery?.pendingCount} />
           </div>
 
           <TransactionTable
@@ -1025,20 +1142,20 @@ function Dashboard({
               icon={<Zap />}
               title="Real-time Webhook Processing"
               description="Live event ingestion from Razorpay"
-              value={`${data.system.events_per_min} events/min`}
+              value={`${liveData.system.events_per_min} events/min`}
             />
 
             <InfoCard
               icon={<Bot />}
               title="AI-Powered Decision Engine"
               description="Smart retry strategies & link generation"
-              value={`${data.system.strategy_accuracy} strategy accuracy`}
+              value={`${liveData.system.strategy_accuracy} strategy accuracy`}
             />
 
             <InfoCard
               icon={<Activity />}
               title="Revenue Impact"
-              description="Recovered ₹24.8M this month"
+              description={`Recovered ${liveData.metrics?.[3]?.value || "₹0"} this month`}
               value="+67% vs. previous month"
             />
 
@@ -1046,7 +1163,7 @@ function Dashboard({
               icon={<Users />}
               title="Customer Experience"
               description="Faster resolutions, higher success"
-              value={`${data.system.recovery_rate} recovery rate`}
+              value={`${liveData.system.recovery_rate} recovery rate`}
             />
           </div>
         </div>
@@ -1063,7 +1180,7 @@ function Dashboard({
   );
 }
 
-function FailureChart({ data }) {
+function FailureChart({ data, failedCount }) {
   return (
     <div className="panel">
       <div className="panel-head">
@@ -1104,7 +1221,7 @@ function FailureChart({ data }) {
           </ResponsiveContainer>
 
           <div className="pie-center">
-            <b>356</b>
+            <b>{failedCount ?? 356}</b>
             <span>Failed Payments</span>
           </div>
         </div>
@@ -1400,15 +1517,20 @@ function RecoveryLinksPage({ transactions, openRecovery }) {
 }
 
 function AnalyticsPage({ data }) {
-  const rows = data?.transactions || [];
+  const liveData = getLiveDashboardData(data);
+  const rows = liveData?.transactions || [];
   const recoveredRows = rows.filter((tx) => tx.status === "Recovered");
+  const activeRows = rows.filter((tx) => tx.status !== "Recovered");
 
-  const totalAtRisk = rows.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+  const totalAtRisk = activeRows.reduce(
+    (sum, tx) => sum + Number(tx.amount || 0),
+    0
+  );
   const recoveredRevenue = recoveredRows.reduce(
     (sum, tx) => sum + Number(tx.amount || 0),
     0
   );
-  const expectedRecoverable = rows.reduce(
+  const expectedRecoverable = activeRows.reduce(
     (sum, tx) => sum + getExpectedRecovery(tx),
     0
   );
@@ -1426,7 +1548,7 @@ function AnalyticsPage({ data }) {
     {
       label: "Revenue at Risk",
       value: `₹${fmt(totalAtRisk)}`,
-      sub: "Value currently represented by intercepted failures",
+      sub: "Unrecovered value still at risk",
       tone: "blue",
     },
     {
@@ -1440,7 +1562,7 @@ function AnalyticsPage({ data }) {
     {
       label: "Expected Recoverable",
       value: `₹${fmt(expectedRecoverable)}`,
-      sub: "AI-weighted recoverable value across active cases",
+      sub: "AI-weighted value across remaining active cases",
       tone: "amber",
     },
     {
@@ -1492,7 +1614,7 @@ function AnalyticsPage({ data }) {
 
           <div className="large-chart">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={data.chart}>
+              <ComposedChart data={liveData.chart}>
                 <CartesianGrid
                   stroke="#18304b"
                   vertical={false}
@@ -1533,7 +1655,7 @@ function AnalyticsPage({ data }) {
           </div>
         </div>
 
-        <FailureChart data={data} />
+        <FailureChart data={liveData} failedCount={liveData.liveRecovery?.pendingCount} />
       </div>
 
       <div className="panel page-panel">
@@ -1571,7 +1693,13 @@ function AnalyticsPage({ data }) {
                     <b>{getRecoveryProbability(tx)}%</b>
                   </td>
                   <td className="green">
-                    <b>₹{fmt(getExpectedRecovery(tx))}</b>
+                    <b>
+                      ₹{fmt(
+                        tx.status === "Recovered"
+                          ? tx.amount
+                          : getExpectedRecovery(tx)
+                      )}
+                    </b>
                   </td>
                   <td>{tx.confidence}%</td>
                   <td>
