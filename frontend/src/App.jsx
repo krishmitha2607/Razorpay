@@ -269,7 +269,13 @@ export default function App() {
       try {
         const parsed = JSON.parse(event.data);
 
-        setEvents((old) => [parsed, ...old].slice(0, 10));
+        setEvents((old) => [parsed, ...old].slice(0, 12));
+
+        // D3: backend state-change events drive UI synchronization.
+        // Synthetic heartbeat events remain visual-only.
+        if (parsed.refresh) {
+          load();
+        }
       } catch {
         // Ignore malformed demo event.
       }
@@ -420,7 +426,10 @@ export default function App() {
           : old
       );
 
-      await load();
+      // D3 primary synchronization happens through the SSE event emitted
+      // by the backend. This small fallback keeps the demo reliable if the
+      // browser temporarily loses the event stream.
+      setTimeout(() => load(), 1200);
 
       if (action === "recover") {
         const recoveredTx = {
@@ -1343,6 +1352,7 @@ function TransactionsPage({
           <option>Monitoring</option>
           <option>Link Sent</option>
           <option>Retry Scheduled</option>
+          <option>Recovered</option>
         </select>
 
         <select
@@ -1972,10 +1982,11 @@ function AssistantPanel({
         <div className="event-stream">
           <b>Live Webhook Stream</b>
 
-          {events.slice(0, 4).map((event, index) => (
-            <small key={index}>
+          {events.slice(0, 5).map((event, index) => (
+            <small key={`${event.ts || index}-${index}`}>
               <span>●</span>
               {event.type} · {event.txn}
+              {event.source === "recovery_action" ? " · LIVE ACTION" : ""}
             </small>
           ))}
         </div>
